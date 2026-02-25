@@ -24,28 +24,46 @@ async function startServer() {
 
     let browser;
     try {
+      console.log("Starting PDF generation for date:", data.data_giorno);
       browser = await puppeteer.launch({
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        args: [
+          "--no-sandbox", 
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu"
+        ],
         headless: true
       });
 
       const page = await browser.newPage();
       
       // Load the template
-      const templatePath = path.join(__dirname, "listone.html");
+      const templatePath = path.join(process.cwd(), "listone.html");
+      console.log("Loading template from:", templatePath);
+      
+      if (!fs.existsSync(templatePath)) {
+        throw new Error(`Template file not found at ${templatePath}`);
+      }
+
       const htmlContent = fs.readFileSync(templatePath, "utf-8");
       
-      await page.setContent(htmlContent);
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+      
+      console.log("Template loaded, injecting data...");
       
       // Inject data and render
       await page.evaluate((data) => {
-        // @ts-ignore
-        window.renderListone(data);
+        if (typeof window.renderListone === 'function') {
+          window.renderListone(data);
+        } else {
+          console.error("window.renderListone is not defined");
+        }
       }, data);
 
-      // Wait for any rendering to finish
-      await new Promise(r => setTimeout(r, 500));
+      // Wait a bit for any internal rendering
+      await new Promise(r => setTimeout(r, 1000));
 
+      console.log("Generating PDF...");
       const pdfBuffer = await page.pdf({
         format: "A4",
         printBackground: true,
